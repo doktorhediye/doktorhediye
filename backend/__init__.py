@@ -1,0 +1,1 @@
+"""Doktor Hediye backend."""
