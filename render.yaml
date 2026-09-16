@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: doktorhediye
+    runtime: python
+    plan: 0.5c-512mb
+    region: frankfurt
+    branch: main
+    buildCommand: pip install -r backend/requirements.txt && python -m backend.prepare_static && python -m unittest discover -s backend -p 'test_*.py'
+    startCommand: gunicorn --bind 0.0.0.0:$PORT --workers 2 --timeout 40 'backend.app:create_app()'
+    healthCheckPath: /api/health
+    autoDeployTrigger: off
+    disk:
+      name: doktorhediye-orders
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: APP_ENV
+        value: production
+      - key: PAYMENT_MODE
+        value: disabled
+      - key: DATABASE_PATH
+        value: /var/data/orders.sqlite3
+      - key: APP_SECRET
+        generateValue: true
+      - key: ADMIN_TOKEN
+        generateValue: true
