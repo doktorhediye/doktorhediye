@@ -5,6 +5,8 @@ services:
     plan: 0.5c-512mb
     region: frankfurt
     branch: main
+    domains:
+      - doktorhediye.com
     buildCommand: pip install -r backend/requirements.txt && python -m backend.prepare_static && python -m unittest discover -s backend -p 'test_*.py'
     startCommand: gunicorn --bind 0.0.0.0:$PORT --workers 2 --timeout 40 'backend.app:create_app()'
     healthCheckPath: /api/health
