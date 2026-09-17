@@ -16,6 +16,8 @@ services:
       mountPath: /var/data
       sizeGB: 1
     envVars:
+      - key: PUBLIC_URL
+        value: https://doktorhediye.com
       - key: PYTHON_VERSION
         value: 3.12.8
       - key: APP_ENV
