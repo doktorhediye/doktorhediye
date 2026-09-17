@@ -1,6 +1,6 @@
 'use strict';
 const $=s=>document.querySelector(s), esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let doctors=[],chosen=null,product=0,draft={},lastOrder=null,cufflink=false;
+let doctors=[],chosen=null,product=0,draft={},lastOrder=null,cufflink=false,pendingGift=false;
 const products=[['İmza Gömlek','3.500 TL'],['Manşet Koleksiyonu','4.500 TL'],['Çizgili İmza','3.750 TL']];
 const prices=[3500,4500,3750],cufflinkPrice=1250;
 const money=n=>n.toLocaleString('tr-TR')+' TL';
@@ -8,13 +8,34 @@ const hasCufflink=()=>product===1&&cufflink;
 const total=()=>prices[product]+(hasCufflink()?cufflinkPrice:0);
 const norm=s=>s.toLocaleLowerCase('tr').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/ı/g,'i');
 const dialog=$('#flow');
-function show(html){$('#flowbody').innerHTML=html;if(!dialog.open)dialog.showModal();}
+function show(html,premium=false){dialog.classList.toggle('accessory-dialog',premium);dialog.removeAttribute('aria-labelledby');$('#flowbody').innerHTML=html;if(!dialog.open)dialog.showModal();}
+dialog.addEventListener('close',()=>dialog.classList.remove('accessory-dialog'));
 $('.close').onclick=()=>dialog.close();dialog.addEventListener('click',e=>{if(e.target===dialog){const r=dialog.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom)dialog.close();}});
 function find(){let q=norm($('#doctor').value.trim());let matches=doctors.filter(d=>norm(d.name+' '+d.branch+' '+d.institution).includes(q)).slice(0,12);$('#results').hidden=false;$('#doctor').setAttribute('aria-expanded','true');$('#results').innerHTML=matches.length?matches.map(d=>`<button data-doctor="${d.id}">${esc(d.title+' '+d.name)}<span>${esc(d.branch)}</span><span>${esc(d.institution)}</span></button>`).join(''):'<p>Bu isim listede bulunamadı. Doktor adını veya branşını farklı yazarak deneyin.</p>';$('#results').querySelectorAll('button').forEach(b=>b.onclick=()=>selectDoctor(b.dataset.doctor));}
-function selectDoctor(id){chosen=doctors.find(d=>d.id===id);if(!chosen)throw Error('Doktor bulunamadı');$('#doctor').value=chosen.name;$('#selected').textContent=chosen.name+' seçildi. Şimdi hediyenizi seçebilirsiniz.';$('#results').hidden=true;$('#doctor').setAttribute('aria-expanded','false');$('#koleksiyon').scrollIntoView({behavior:'smooth'});}
+function selectDoctor(id){chosen=doctors.find(d=>d.id===id);if(!chosen)throw Error('Doktor bulunamadı');$('#doctor').value=chosen.name;$('#selected').textContent=chosen.name+' seçildi. Şimdi hediyenizi seçebilirsiniz.';$('#results').hidden=true;$('#doctor').setAttribute('aria-expanded','false');if(pendingGift){pendingGift=false;details();}else $('#koleksiyon').scrollIntoView({behavior:'smooth'});}
 $('#doctor').addEventListener('input',()=>{chosen=null;$('#selected').textContent='';find();});$('#doctor').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();find();$('#results button')?.focus();}if(e.key==='Escape'){$('#results').hidden=true;$('#doctor').setAttribute('aria-expanded','false');}});$('#search').onclick=find;
 document.addEventListener('click',e=>{if(!e.target.closest('.finder')){$('#results').hidden=true;$('#doctor').setAttribute('aria-expanded','false');}});
-document.querySelectorAll('[data-product]').forEach(b=>b.onclick=()=>{product=Number(b.dataset.product);if(product!==1)cufflink=false;if(!chosen){$('#doctor').focus();$('#doctor').scrollIntoView({block:'center',behavior:'smooth'});find();$('#selected').textContent='Önce hediyeyi göndereceğiniz doktoru seçin.';return;}details();});
+function continueGift(){
+ if(!chosen){
+  pendingGift=true;dialog.close();
+  $('#doctor').scrollIntoView({block:'center',behavior:'smooth'});$('#doctor').focus({preventScroll:true});
+  find();$('#selected').textContent=products[product][0]+' seçildi. Devam etmek için doktorunuzu seçin.';return;
+ }
+ pendingGift=false;details();
+}
+document.querySelectorAll('[data-product]').forEach(b=>b.onclick=()=>{
+ product=Number(b.dataset.product);pendingGift=false;
+ if(product===1){chooseCufflinks();return;}
+ cufflink=false;continueGift();
+});
+function chooseCufflinks(){
+ show(`<div class="accessory-preview"><img src="assets/cufflinks.png" alt="Özel lacivert kutusunda gümüş tonlu Siyah Oval kol düğmesi çifti" width="1122" height="1402"><div class="accessory-preview-caption"><span>THE FINISHING TOUCH</span><strong>Küçük bir detay.<br>Eksiksiz bir hediye.</strong></div></div><div class="accessory-panel"><div class="eyebrow">FRENCH CUFF / 01</div><h2 id="accessory-title">Son dokunuş,<br><em>sizin seçiminiz.</em></h2><p id="accessory-description">Çift manşetin zarafetini bir çift kol düğmesiyle tamamlayın. Kendi kol düğmesini kullanacaksa yalnızca gömleği seçebilirsiniz.</p><fieldset class="premium-options"><legend>Hediyenizi nasıl hazırlayalım?</legend><label class="premium-choice"><input type="radio" name="accessory-first" value="oval" ${cufflink?'checked':''}><span><strong>Siyah Oval ile tamamla</strong><small>Gümüş tonlu · bir çift · özel kutusunda</small></span><b>+${money(cufflinkPrice)}</b></label><label class="premium-choice"><input type="radio" name="accessory-first" value="none" ${!cufflink?'checked':''}><span><strong>Yalnızca gömlek</strong><small>Kol düğmesi eklemeden devam et</small></span><b>+0 TL</b></label></fieldset><div class="accessory-receipt" aria-live="polite"><div><span>Manşet Koleksiyonu</span><span>${money(prices[1])}</span></div><div><span>Kol düğmesi</span><span id="accessory-extra">${cufflink?money(cufflinkPrice):'Eklenmedi'}</span></div><div class="accessory-grand"><span>Hediye toplamı</span><strong id="accessory-total">${money(total())}</strong></div></div><button class="primary accessory-continue" id="accessory-next">${chosen?'Hediye detaylarına geç':'Doktorunuzu seçin'} <span>→</span></button><p class="accessory-footnote">Kol düğmesi isteğe bağlıdır. Fiyatlar örnektir; satış henüz açık değildir.</p></div>`,true);
+ dialog.setAttribute('aria-labelledby','accessory-title');
+ document.querySelectorAll('input[name="accessory-first"]').forEach(input=>input.onchange=()=>{
+  cufflink=input.value==='oval';$('#accessory-extra').textContent=cufflink?money(cufflinkPrice):'Eklenmedi';$('#accessory-total').textContent=money(total());
+ });
+ $('#accessory-next').onclick=continueGift;
+}
 function summary(){return `<div class="summary"><strong>${esc(products[product][0])} · ${products[product][1]}</strong><p>${esc(chosen.title+' '+chosen.name)}</p><p>${esc(chosen.branch)} · ${esc(chosen.institution)}</p><div id="orderPrice" aria-live="polite">${priceSummary()}</div></div>`;}
 function priceSummary(){return `${product===1?`<p>${hasCufflink()?'Siyah Oval kol düğmesi (çift) · +'+money(cufflinkPrice):'Kol düğmesi eklenmedi'}</p>`:''}<p class="order-total"><span>Örnek toplam</span><strong>${money(total())}</strong></p>`;}
 function accessoryOptions(){return product===1?`<fieldset class="cufflink-options"><legend>Manşetin son dokunuşu</legend><p>Çift manşet kol düğmesiyle kullanılır. Doktorunuzun kendi kol düğmesi varsa eklemeden devam edebilirsiniz.</p><label class="accessory-choice"><input type="radio" name="cufflink" value="none" ${!cufflink?'checked':''}><span>Kol düğmesi ekleme<small>Yalnızca özel dikim gömlek</small></span><b>+0 TL</b></label><label class="accessory-choice"><input type="radio" name="cufflink" value="oval" ${cufflink?'checked':''}><img src="assets/cufflinks.png" alt="Kutuda siyah oval kol düğmesi çifti" width="60" height="75"><span>Siyah Oval<small>Gümüş tonlu · bir çift · kutulu</small></span><b>+${money(cufflinkPrice)}</b></label><small>İsteğe bağlı ek ürün. Görsel ve fiyat örnektir.</small></fieldset>`:'';}
