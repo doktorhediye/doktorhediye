@@ -65,6 +65,24 @@ class BackendTests(unittest.TestCase):
         self.assertEqual(order['amount'],575000)
         self.assertNotIn('buyer',order)
 
+    def test_delivery_choice_persists_and_validates(self):
+        for method in ('buyer', 'doctor'):
+            self.payload['delivery_method'] = method
+            oid,token=self.order()
+            self.app=App(self.config)
+            order=self.request('/api/orders/'+oid,token=token)[1]
+            self.assertEqual(order['delivery_method'],method)
+            admin=self.request('/api/admin/orders',token='a'*40)[1]
+            saved=next(o for o in admin['orders'] if o['id']==oid)
+            self.assertEqual(saved['delivery_method'],method)
+            self.assertEqual(saved['buyer']['address'],self.payload['buyer']['address'])
+            self.assertEqual(order['amount'],575000)
+        self.payload['delivery_method']='invalid'
+        self.assertEqual(self.request('/api/orders','POST',self.payload,key=str(uuid.uuid4()))[0],400)
+        del self.payload['delivery_method']
+        oid,token=self.order()
+        self.assertEqual(self.request('/api/orders/'+oid,token=token)[1]['delivery_method'],'doctor')
+
     def test_idempotent_create_and_conflict(self):
         key=str(uuid.uuid4())
         first=self.request('/api/orders','POST',self.payload,key=key)

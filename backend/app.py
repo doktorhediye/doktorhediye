@@ -156,7 +156,7 @@ class App:
         except (ValueError, UnicodeError): raise Problem(400, 'İstek biçimi geçersiz.')
 
     def validate(self, data):
-        allowed = {'doctor_id','product_id','cufflinks','buyer','note'}
+        allowed = {'doctor_id','product_id','cufflinks','buyer','note','delivery_method'}
         if set(data)-allowed: raise Problem(400, 'Bilinmeyen sipariş alanı; tutarı sunucu hesaplar.')
         doctor_id = data.get('doctor_id')
         if not isinstance(doctor_id, str) or doctor_id not in self.doctors:
@@ -166,6 +166,9 @@ class App:
         cufflinks = data.get('cufflinks', False)
         if not isinstance(cufflinks, bool) or (cufflinks and not product['cufflinks']):
             raise Problem(400, 'Kol düğmesi yalnız çift manşetli modelle seçilebilir.')
+        delivery_method = data.get('delivery_method', 'doctor')
+        if delivery_method not in ('buyer', 'doctor'):
+            raise Problem(400, 'Hediyenin teslim şeklini seçin.')
         buyer = data.get('buyer')
         if not isinstance(buyer, dict) or set(buyer) != {'name','email','phone','address'}:
             raise Problem(400, 'Gönderen bilgilerini tamamlayın.')
@@ -185,7 +188,8 @@ class App:
         if cufflinks: items.append(self.catalog['accessory'].copy())
         doctor = self.doctors[doctor_id]
         return dict(doctor={k:doctor[k] for k in ('id','name','title','branch','institution')},
-                    items=items, buyer=clean, note=note.strip())
+                    items=items, buyer=clean, note=note.strip(),
+                    **({'delivery_method':delivery_method} if 'delivery_method' in data else {}))
 
     def create_order(self, env):
         self.rate_limit(self.ip(env), 'create', 20)
@@ -216,7 +220,8 @@ class App:
         p = json.loads(row['payload'])
         return dict(id=row['id'],amount=row['amount'],currency='TL',payment=row['payment'],
                     stage=row['stage'],mode=row['mode'],items=p['items'],doctor=p['doctor'],
-                    tracking=row['tracking'],version=row['version'],created=row['created'])
+                    tracking=row['tracking'],version=row['version'],created=row['created'],
+                    delivery_method=p.get('delivery_method','doctor'))
 
     def start_payment(self, env, oid):
         self.require_order(env,oid)
