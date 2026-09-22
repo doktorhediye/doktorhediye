@@ -2,6 +2,12 @@
 const el=id=>document.getElementById(id);
 const format=n=>(n/100).toLocaleString('tr-TR',{style:'currency',currency:'TRY'});
 const labels={pending:'Ödeme bekleniyor',paid:'Ödeme doğrulandı',failed:'Ödeme başarısız',awaiting_payment:'Ödeme bekleniyor',awaiting_acceptance:'Doktorun kabulü bekleniyor',measurements:'Ölçüler ve tercihler alınıyor',tailoring:'Dikimde',shipped:'Kargoya verildi',delivered:'Teslim edildi',refund_requested:'İade talebi inceleniyor',payment_failed:'Ödeme başarısız'};
+const deliveryLabels={buyer:'Size teslim · Doktorunuza siz hediye edin',doctor:'Doğrudan doktorunuza teslim'};
+document.querySelectorAll('input[name=delivery]').forEach(input=>input.onchange=()=>{
+ const toBuyer=input.value==='buyer';
+ el('addressTitle').textContent=toBuyer?'Adresiniz / Hediyenin teslim edileceği adres':'Gönderenin adresi';
+ el('deliveryHint').textContent=toBuyer?'Hediye kutusunu bu adrese göndereceğiz. Doktorunuza siz teslim edebilirsiniz.':'Bu alan gönderenin adresidir. Doktorun teslimat adresini hediye kabulünden sonra kendisinden alacağız.';
+});
 let config,product,doctor,orderId='',access='',idempotency='',lastPayload='';
 async function api(path,options={}){
  const res=await fetch(path,{...options,headers:{'Content-Type':'application/json',...(access?{Authorization:'Bearer '+access}:{}),...options.headers}});
@@ -13,7 +19,7 @@ async function refresh(){
  try{
  const order=await api('/api/orders/'+encodeURIComponent(orderId));
  el('orderResult').hidden=false;
- el('orderStatus').textContent=order.id+' · '+format(order.amount)+' · '+labels[order.payment]+' · '+labels[order.stage]+(order.mode==='test'?' · TEST İŞLEMİ':'')+(order.tracking?' · '+order.tracking:'');
+ el('orderStatus').textContent=order.id+' · '+format(order.amount)+' · '+labels[order.payment]+' · '+labels[order.stage]+' · '+(deliveryLabels[order.delivery_method]||deliveryLabels.doctor)+(order.mode==='test'?' · TEST İŞLEMİ':'')+(order.tracking?' · '+order.tracking:'');
  el('savedOrder').value=orderId;el('savedAccess').value=access;
  if(order.payment!=='pending')el('payment').replaceChildren();
  }catch(error){el('message').textContent=error.message;}
@@ -22,7 +28,7 @@ el('refresh').onclick=refresh;
 el('trackingForm').onsubmit=e=>{e.preventDefault();orderId=e.target.elements.order.value.trim();access=e.target.elements.access.value.trim();refresh();};
 el('checkoutForm').onsubmit=async e=>{
  e.preventDefault();const form=e.target;el('submit').disabled=true;el('message').textContent='Sipariş kaydediliyor…';
- const payload={doctor_id:doctor.id,product_id:product.id,cufflinks:form.elements.cufflinks.checked,buyer:{name:form.elements.name.value.trim(),email:form.elements.email.value.trim(),phone:form.elements.phone.value.trim(),address:form.elements.address.value.trim()},note:form.elements.note.value.trim()};
+ const payload={doctor_id:doctor.id,product_id:product.id,delivery_method:form.elements.delivery.value,cufflinks:form.elements.cufflinks.checked,buyer:{name:form.elements.name.value.trim(),email:form.elements.email.value.trim(),phone:form.elements.phone.value.trim(),address:form.elements.address.value.trim()},note:form.elements.note.value.trim()};
  const serialized=JSON.stringify(payload);if(serialized!==lastPayload){lastPayload=serialized;idempotency=crypto.randomUUID();}
  try{
  const result=await api('/api/orders',{method:'POST',headers:{'Idempotency-Key':idempotency},body:serialized});
