@@ -1,6 +1,6 @@
 # Sipariş e-posta bildirimleri
 
-Alıcı: doktorhediye@hotmail.com. Başka bir kişisel e-posta adresi gerekmez.
+Alıcı: doktor-hediye@hotmail.com. Başka bir kişisel e-posta adresi gerekmez.
 
 ## Bağlantı
 1. Resend hesabını mevcut e-posta adresinizle açın. https://resend.com
@@ -9,7 +9,7 @@ Alıcı: doktorhediye@hotmail.com. Başka bir kişisel e-posta adresi gerekmez.
 4. Render > doktorhediye > Environment bölümünde aşağıdaki değerleri ayarlayın:
    - RESEND_API_KEY: servis anahtarı
    - MAIL_FROM: doğrulanmış gönderici adresi, örneğin siparis@bildirim.doktorhediye.com (önce doğrulama gerekir)
-   - MAIL_TO: doktorhediye@hotmail.com
+   - MAIL_TO: doktor-hediye@hotmail.com
    - MAIL_ENABLED: yes
    - MAIL_NOTIFY_TEST: yes (yalnız kurulum testi için)
 5. Kaydedip deploy edin. Açıkça TEST olarak işaretlenmiş örnek bir siparişle alıcı gelen kutusunu kontrol edin. Sonra MAIL_NOTIFY_TEST=no yapın.
