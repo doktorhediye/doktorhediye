@@ -187,7 +187,7 @@ class NotificationTests(unittest.TestCase):
         self.assertEqual(len(rows),2)
         for row in rows:
             payload=json.loads(row['payload'])
-            self.assertEqual(payload['to'],['doktorhediye@hotmail.com'])
+            self.assertEqual(payload['to'],['doktor-hediye@hotmail.com'])
             self.assertIn('TEST',payload['subject'])
             self.assertNotIn(self.payload['buyer']['email'],payload['text'])
             self.assertNotIn(self.payload['buyer']['name'],payload['text'])

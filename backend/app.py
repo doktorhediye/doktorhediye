@@ -40,7 +40,7 @@ class Config:
     mail_enabled: bool = False
     resend_api_key: str = ''
     mail_from: str = ''
-    mail_to: str = 'doktorhediye@hotmail.com'
+    mail_to: str = 'doktor-hediye@hotmail.com'
     mail_notify_test: bool = False
 
     @classmethod
@@ -54,7 +54,7 @@ class Config:
             trusted_proxy_ip=os.getenv('TRUSTED_PROXY_IP', ''), test_user_ip=os.getenv('PAYTR_TEST_USER_IP', ''),
             production=os.getenv('APP_ENV') == 'production',
             mail_enabled=os.getenv('MAIL_ENABLED')=='yes', resend_api_key=os.getenv('RESEND_API_KEY',''),
-            mail_from=os.getenv('MAIL_FROM',''),mail_to=os.getenv('MAIL_TO','doktorhediye@hotmail.com'),
+            mail_from=os.getenv('MAIL_FROM',''),mail_to=os.getenv('MAIL_TO','doktor-hediye@hotmail.com'),
             mail_notify_test=os.getenv('MAIL_NOTIFY_TEST')=='yes')
 
 class App:
