@@ -162,4 +162,93 @@ class BackendTests(unittest.TestCase):
         self.assertEqual(json.loads(base64.b64decode(f['user_basket']))[1][1],'1250.00')
         self.assertEqual(f['no_installment'],'1')
 
+
+class NotificationTests(unittest.TestCase):
+    request=BackendTests.request
+    order=BackendTests.order
+    start=BackendTests.start
+    callback=BackendTests.callback
+    notification=BackendTests.notification
+
+    def setUp(self):
+        BackendTests.setUp(self)
+        self.config=replace(self.config,mail_enabled=True,resend_api_key='fake-test-key',mail_from='orders@example.test',mail_notify_test=True)
+        self.app=App(self.config,lambda *args:'mocktoken123')
+
+    def test_durable_outbox_duplicates_and_privacy(self):
+        from backend import notifications
+        key=str(uuid.uuid4())
+        _,r=self.request('/api/orders','POST',self.payload,key=key)
+        self.request('/api/orders','POST',self.payload,key=key)
+        oid=r['order']['id'];self.start(oid,r['access_token'])
+        self.callback(self.notification(oid));self.callback(self.notification(oid))
+        with self.app.db() as db:
+            rows=db.execute('SELECT * FROM mail_outbox ORDER BY kind').fetchall()
+        self.assertEqual(len(rows),2)
+        for row in rows:
+            payload=json.loads(row['payload'])
+            self.assertEqual(payload['to'],['doktorhediye@hotmail.com'])
+            self.assertIn('TEST',payload['subject'])
+            self.assertNotIn(self.payload['buyer']['email'],payload['text'])
+            self.assertNotIn(self.payload['buyer']['name'],payload['text'])
+            self.assertNotIn(self.payload['note'],payload['text'])
+            self.assertNotIn(r['access_token'],payload['text'])
+        self.app=App(self.config)
+        calls=[]
+        def sender(c,p,k):calls.append(k);return 'provider-123'
+        self.assertTrue(notifications.process_one(self.app,sender))
+        self.assertTrue(notifications.process_one(self.app,sender))
+        self.assertFalse(notifications.process_one(self.app,sender))
+        self.assertEqual(len(set(calls)),2)
+        self.assertEqual(self.request('/api/admin/orders',token='a'*40)[1]['mail']['sent'],2)
+
+    def test_two_workers_do_not_claim_same_email(self):
+        from backend import notifications
+        self.order()
+        second=App(self.config)
+        def sender(*args):
+            self.assertFalse(notifications.process_one(second,lambda *a:self.fail('Duplicate claim')))
+            return 'accepted'
+        self.assertTrue(notifications.process_one(self.app,sender))
+
+    def test_permanent_provider_failure_requires_review(self):
+        from backend import notifications
+        self.order()
+        def sender(*args):raise notifications.MailError(False)
+        notifications.process_one(self.app,sender)
+        with self.app.db() as db:
+            self.assertEqual(db.execute('SELECT state FROM mail_outbox').fetchone()[0],'review')
+        self.assertFalse(notifications.process_one(self.app,sender))
+
+    def test_retry_keeps_key_payload_and_does_not_fail_order(self):
+        from backend import notifications
+        self.order();calls=[]
+        def fail(c,p,k):calls.append((p,k));raise TimeoutError()
+        notifications.process_one(self.app,fail)
+        with self.app.db() as db:
+            self.assertEqual(db.execute('SELECT state FROM mail_outbox').fetchone()[0],'pending')
+            db.execute('UPDATE mail_outbox SET next_attempt=0')
+        def ok(c,p,k):calls.append((p,k));return 'accepted'
+        notifications.process_one(self.app,ok)
+        self.assertEqual(calls[0],calls[1])
+
+    def test_expired_lease_and_retry_horizon(self):
+        from backend import notifications
+        import time
+        self.order()
+        with self.app.db() as db:
+            db.execute("UPDATE mail_outbox SET state='sending',lease_until=?,first_attempt=?",(int(time.time())+60,int(time.time())))
+        self.assertFalse(notifications.process_one(self.app,lambda *a:'accepted'))
+        with self.app.db() as db:db.execute('UPDATE mail_outbox SET lease_until=0,first_attempt=?',(int(time.time())-24*3600,))
+        self.assertFalse(notifications.process_one(self.app,lambda *a:self.fail('Must not resend after dedupe window')))
+        with self.app.db() as db:self.assertEqual(db.execute('SELECT state FROM mail_outbox').fetchone()[0],'review')
+
+    def test_test_records_off_and_missing_config(self):
+        from backend import notifications
+        self.app=App(replace(self.config,mail_notify_test=False))
+        self.order()
+        self.assertFalse(notifications.process_one(self.app,lambda *a:self.fail('Test email disabled')))
+        with self.assertRaises(ValueError):App(replace(self.config,resend_api_key=''))
+        with self.assertRaises(ValueError):App(replace(self.config,mail_from='invalid\naddress'))
+
 if __name__=='__main__':unittest.main()

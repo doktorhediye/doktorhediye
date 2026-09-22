@@ -13,7 +13,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
-from . import paytr
+from . import paytr, notifications
 
 ROOT = Path(__file__).resolve().parent.parent
 STAGES = ['awaiting_acceptance', 'measurements', 'tailoring', 'shipped', 'delivered']
@@ -37,6 +37,12 @@ class Config:
     test_user_ip: str = ''
     production: bool = False
 
+    mail_enabled: bool = False
+    resend_api_key: str = ''
+    mail_from: str = ''
+    mail_to: str = 'doktorhediye@hotmail.com'
+    mail_notify_test: bool = False
+
     @classmethod
     def from_env(cls):
         return cls(db_path=os.getenv('DATABASE_PATH', str(ROOT/'backend/runtime/orders.sqlite3')),
@@ -46,7 +52,10 @@ class Config:
             merchant_key=os.getenv('PAYTR_MERCHANT_KEY', ''), merchant_salt=os.getenv('PAYTR_MERCHANT_SALT', ''),
             live_confirmed=os.getenv('LIVE_SALES_CONFIRMED') == 'yes',
             trusted_proxy_ip=os.getenv('TRUSTED_PROXY_IP', ''), test_user_ip=os.getenv('PAYTR_TEST_USER_IP', ''),
-            production=os.getenv('APP_ENV') == 'production')
+            production=os.getenv('APP_ENV') == 'production',
+            mail_enabled=os.getenv('MAIL_ENABLED')=='yes', resend_api_key=os.getenv('RESEND_API_KEY',''),
+            mail_from=os.getenv('MAIL_FROM',''),mail_to=os.getenv('MAIL_TO','doktorhediye@hotmail.com'),
+            mail_notify_test=os.getenv('MAIL_NOTIFY_TEST')=='yes')
 
 class App:
     def __init__(self, config, provider=paytr.request_token):
@@ -66,6 +75,10 @@ class App:
             raise ValueError('PayTR credentials are required')
         for value in (config.test_user_ip, config.trusted_proxy_ip):
             if value: ipaddress.ip_address(value)
+        if config.mail_enabled:
+            if not notifications.ready(config): raise ValueError('Mail sender and Resend API key are required')
+            if not re.fullmatch(r'[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+',config.mail_from) or not re.fullmatch(r'[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+',config.mail_to):
+                raise ValueError('MAIL_FROM and MAIL_TO must be single email addresses')
         self.catalog = json.loads((ROOT/'backend/catalog.json').read_text())
         if config.mode == 'live' and not (config.live_confirmed and self.catalog['prices_confirmed']):
             raise ValueError('Live sales and actual catalog prices must be explicitly confirmed')
@@ -87,6 +100,7 @@ class App:
             CREATE TABLE IF NOT EXISTS rate_limits (
               bucket TEXT PRIMARY KEY, count INTEGER NOT NULL, expires INTEGER NOT NULL);
             ''')
+            db.executescript(notifications.SCHEMA)
         os.chmod(config.db_path, 0o600)
 
     @contextmanager
@@ -209,6 +223,7 @@ class App:
                 db.execute('INSERT INTO orders(id,idem,fingerprint,payload,amount,mode,created,updated) VALUES(?,?,?,?,?,?,?,?)',
                     (oid,key,fingerprint,encoded,sum(i['price'] for i in payload['items']),self.config.mode,now,now))
                 self.event(db,oid,'created','Sipariş kaydedildi; ödeme bekleniyor.')
+                notifications.enqueue(self,db,self.get_order(db,oid),'created')
             row = self.get_order(db,oid)
         return 201, dict(order=self.public_order(row), access_token=self.access_token(oid))
 
@@ -275,6 +290,7 @@ class App:
             db.execute('UPDATE orders SET payment=?,stage=?,token=NULL,version=version+1,updated=? WHERE id=?',
                        (expected,'awaiting_acceptance' if expected=='paid' else 'payment_failed',int(time.time()),row['id']))
             self.event(db,row['id'],'payment_'+expected,'PayTR imzalı bildirimi doğrulandı.')
+            if expected=='paid':notifications.enqueue(self,db,self.get_order(db,row['id']),'paid')
         return 200,'OK'
 
     def update_stage(self, env, oid):
@@ -320,7 +336,7 @@ class App:
             if method=='GET' and path=='/api/admin/orders':
                 with self.db() as db:
                     rows=db.execute('SELECT * FROM orders ORDER BY created DESC,id DESC LIMIT 200').fetchall()
-                    return 200,{'orders':[dict(self.public_order(r),buyer=json.loads(r['payload'])['buyer'],note=json.loads(r['payload'])['note']) for r in rows]}
+                    return 200,{'mail':notifications.status(self,db),'orders':[dict(self.public_order(r),buyer=json.loads(r['payload'])['buyer'],note=json.loads(r['payload'])['note']) for r in rows]}
             match=re.fullmatch(r'/api/admin/orders/(DH[a-f0-9]{32})',path)
             if method=='PATCH' and match:return self.update_stage(env,match[1])
         if path.startswith('/api/'):raise Problem(404,'Uç nokta bulunamadı.')
@@ -353,7 +369,10 @@ class App:
         start_response(str(status)+' '+HTTPStatus(status).phrase,headers)
         return [b'' if env['REQUEST_METHOD']=='HEAD' else body]
 
-def create_app():return App(Config.from_env())
+def create_app():
+    app=App(Config.from_env())
+    notifications.start_worker(app)
+    return app
 
 if __name__=='__main__':
     from wsgiref.simple_server import make_server
