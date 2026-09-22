@@ -149,7 +149,7 @@ class BackendTests(unittest.TestCase):
         self.app=App(replace(self.config,mode='disabled'))
         oid,token=self.order()
         self.assertEqual(self.start(oid,token)[0],503)
-        with self.assertRaises(ValueError):App(replace(self.config,mode='live',live_confirmed=True))
+        with self.assertRaises(ValueError):App(replace(self.config,mode='live',live_confirmed=False))
         with self.assertRaises(ValueError):App(replace(self.config,public_url='http://example.test'))
 
     def test_token_payload_matches_official_formula(self):
