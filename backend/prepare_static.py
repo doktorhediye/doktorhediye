@@ -3,7 +3,7 @@ from pathlib import Path
 import shutil
 
 ROOT=Path(__file__).resolve().parent.parent
-FILES=('index.html','app.js','style.css','checkout.html','checkout.js','checkout.css',
+FILES=('index.html','app.js','style.css','checkout.html','checkout.js','checkout.css','order-progress.js','order-progress.css',
        'doctors.json','directory.json','directory.js','doktorlar.html','Medipol-Doktor-Listesi.xlsx')
 
 def prepare(root=ROOT):
