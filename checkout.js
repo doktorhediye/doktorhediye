@@ -1,7 +1,7 @@
 'use strict';
 const el=id=>document.getElementById(id);
 const format=n=>(n/100).toLocaleString('tr-TR',{style:'currency',currency:'TRY'});
-const labels={pending:'Ödeme bekleniyor',paid:'Ödeme doğrulandı',failed:'Ödeme başarısız',awaiting_payment:'Ödeme bekleniyor',awaiting_acceptance:'Doktorun kabulü bekleniyor',measurements:'Ölçüler ve tercihler alınıyor',tailoring:'Dikimde',shipped:'Kargoya verildi',delivered:'Teslim edildi',refund_requested:'İade talebi inceleniyor',payment_failed:'Ödeme başarısız'};
+const labels={pending:'Ödeme bekleniyor',paid:'Ödeme doğrulandı',failed:'Ödeme başarısız',awaiting_payment:'Ödeme bekleniyor',awaiting_acceptance:'Doktorun kabulü bekleniyor',measurements:'Ölçüler ve tercihler alınıyor',tailoring:'Hazırlanıyor',shipped:'Kargoya verildi',delivered:'Teslim edildi',refund_requested:'İade talebi inceleniyor',payment_failed:'Ödeme başarısız'};
 const deliveryLabels={buyer:'Size teslim · Doktorunuza siz hediye edin',doctor:'Doğrudan doktorunuza teslim'};
 document.querySelectorAll('input[name=delivery]').forEach(input=>input.onchange=()=>{
  const toBuyer=input.value==='buyer';
@@ -19,6 +19,7 @@ async function refresh(){
  try{
  const order=await api('/api/orders/'+encodeURIComponent(orderId));
  el('orderResult').hidden=false;
+ el('orderProgress').replaceChildren(orderProgress(order));
  el('orderStatus').textContent=order.id+' · '+format(order.amount)+' · '+labels[order.payment]+' · '+labels[order.stage]+' · '+(deliveryLabels[order.delivery_method]||deliveryLabels.doctor)+(order.mode==='test'?' · TEST İŞLEMİ':'')+(order.tracking?' · '+order.tracking:'');
  el('savedOrder').value=orderId;el('savedAccess').value=access;
  if(order.payment!=='pending')el('payment').replaceChildren();

@@ -1,0 +1,12 @@
+/* Shared, read-only milestones. Payment is never inferred from production status. */
+(function(){
+ const accepted=['measurements','tailoring','shipped','delivered'];
+ window.orderProgress=function(order){
+  const paid=order.payment==='paid',approved=accepted.includes(order.stage);
+  const steps=[['Sipariş alındı','Sipariş kaydı oluşturuldu.',true],['Onaylandı','Doktorun hediye kabulü alındı.',approved],['Ödeme alındı',order.mode==='live'?'Ödeme sağlayıcısı tarafından doğrulandı.':'Test ödemesi; gerçek tahsilat değildir.',paid],['Hazırlanıyor','Ölçü, kumaş ve özel dikim süreci.',paid&&['tailoring','shipped','delivered'].includes(order.stage)],['Kargoda',order.tracking||'Kargo bilgisi eklendiğinde burada görünür.',paid&&['shipped','delivered'].includes(order.stage)],['Teslim edildi',order.delivery_method==='buyer'?'Hediye gönderene teslim edildi.':'Hediye doktora teslim edildi.',paid&&order.stage==='delivered']];
+  const box=document.createElement('ol');box.className='order-progress';box.setAttribute('aria-label','Sipariş takip adımları');
+  steps.forEach(([label,description,complete],i)=>{const item=document.createElement('li');const active=(i===3&&order.stage==='tailoring')||(i===4&&order.stage==='shipped');const paused=order.stage==='refund_requested'&&!complete;item.className=active?'current':complete?'complete':'waiting';if(active)item.setAttribute('aria-current','step');const number=document.createElement('span');number.className='step-number';number.textContent=complete?'✓':String(i+1).padStart(2,'0');const heading=document.createElement('strong');heading.textContent=label;const state=document.createElement('span');state.className='step-state';state.textContent=active?'Devam ediyor':paused?'Durduruldu':complete?'Tamamlandı':'Bekliyor';const detail=document.createElement('small');detail.textContent=paused?'İade talebi nedeniyle süreç durduruldu.':complete?description:(i===1?'Doktorun hediye kabulü bekleniyor.':i===2?(order.payment==='failed'?'Ödeme başarısız; tahsilat doğrulanmadı.':'Ödeme doğrulaması bekleniyor.'):'Henüz bu aşamaya gelinmedi.');item.append(number,heading,state,detail);box.append(item);});
+  if(order.stage==='refund_requested'){const note=document.createElement('li');note.className='progress-exception';note.textContent='İade talebi inceleniyor. Bu durum, para iadesinin tamamlandığı anlamına gelmez.';box.append(note);}
+  return box;
+ };
+})();
