@@ -5,6 +5,8 @@ import hmac
 import ipaddress
 import json
 import mimetypes
+import logging
+import traceback
 import os
 import re
 import secrets
@@ -354,7 +356,11 @@ class App:
     def __call__(self, env, start_response):
         try: status,result=self.route(env)
         except Problem as e:status,result=e.status,{'error':e.message}
-        except Exception:
+        except Exception as exc:
+            # Stack locations only: never log exception messages, headers or customer data.
+            frames=traceback.extract_tb(exc.__traceback__)
+            logging.getLogger(__name__).error('Request failure %s at %s',type(exc).__name__,
+                ' > '.join(f'{Path(f.filename).name}:{f.lineno}:{f.name}' for f in frames))
             # No raw provider messages, database rows or customer data in HTTP responses.
             status,result=500,{'error':'İşlem tamamlanamadı. Lütfen destek ile iletişim kurun.'}
         if isinstance(result,Path):
