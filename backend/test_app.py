@@ -211,6 +211,38 @@ class NotificationTests(unittest.TestCase):
             return 'accepted'
         self.assertTrue(notifications.process_one(self.app,sender))
 
+    def test_idle_poll_does_not_require_write_lock(self):
+        import sqlite3
+        from backend import notifications
+        writer=sqlite3.connect(self.config.db_path)
+        try:
+            writer.execute('BEGIN IMMEDIATE')
+            self.assertFalse(notifications.process_one(self.app,lambda *a:self.fail('No queued mail')))
+        finally:
+            writer.rollback();writer.close()
+
+    def test_slow_sender_does_not_block_admin(self):
+        from backend import notifications
+        import threading
+        self.order()
+        started=threading.Event();release=threading.Event();errors=[]
+        def sender(*args):
+            started.set()
+            if not release.wait(5):raise AssertionError('Sender timed out')
+            return 'accepted'
+        def process():
+            try:notifications.process_one(self.app,sender)
+            except Exception as exc:errors.append(exc)
+        thread=threading.Thread(target=process);thread.start()
+        try:
+            self.assertTrue(started.wait(2))
+            status,data=self.request('/api/admin/orders',token='a'*40)
+            self.assertEqual(status,200)
+            self.assertEqual(len(data['orders']),1)
+        finally:
+            release.set();thread.join(6)
+        self.assertFalse(thread.is_alive());self.assertEqual(errors,[])
+
     def test_permanent_provider_failure_requires_review(self):
         from backend import notifications
         self.order()

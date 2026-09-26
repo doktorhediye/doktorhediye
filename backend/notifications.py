@@ -53,6 +53,11 @@ def enqueue(app, db, row, kind):
 def process_one(app, sender=send):
     if not ready(app.config): return False
     now=int(time.time());lease=uuid.uuid4().hex
+    # Idle polling must not acquire the writer lock (or update every row).
+    # Recheck under BEGIN IMMEDIATE below to keep claims safe across workers.
+    with app.db() as db:
+        due=db.execute("SELECT 1 FROM mail_outbox WHERE (state='pending' AND next_attempt<=?) OR (state='sending' AND lease_until<=?) OR (state IN ('pending','sending') AND first_attempt<? AND lease_until<=?) LIMIT 1",(now,now,now-23*3600,now)).fetchone()
+    if not due:return False
     with app.db() as db:
         db.execute('BEGIN IMMEDIATE')
         # Never retry beyond Resend's 24h deduplication window after ambiguous acceptance.

@@ -11,6 +11,7 @@ import os
 import re
 import secrets
 import sqlite3
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -62,6 +63,7 @@ class Config:
 class App:
     def __init__(self, config, provider=paytr.request_token):
         self.config, self.provider = config, provider
+        self._db_lock = threading.RLock()
         if len(config.secret) < 32:
             raise ValueError('APP_SECRET must contain at least 32 random characters')
         if config.admin_token and len(config.admin_token) < 32:
@@ -107,14 +109,17 @@ class App:
 
     @contextmanager
     def db(self):
-        db = sqlite3.connect(self.config.db_path, timeout=10)
-        db.row_factory = sqlite3.Row
-        db.execute('PRAGMA foreign_keys=ON')
-        try:
-            with db:
-                yield db
-        finally:
-            db.close()
+        # Do not let the mail polling thread compete with requests inside a worker.
+        # SQLite still coordinates transactions across separate worker processes.
+        with self._db_lock:
+            db = sqlite3.connect(self.config.db_path, timeout=10)
+            db.row_factory = sqlite3.Row
+            try:
+                db.execute('PRAGMA foreign_keys=ON')
+                with db:
+                    yield db
+            finally:
+                db.close()
 
     def access_token(self, oid):
         return hmac.new(self.config.secret.encode(), ('order:'+oid).encode(), hashlib.sha256).hexdigest()
